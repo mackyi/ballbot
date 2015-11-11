@@ -28,10 +28,11 @@ for rb=0
 
     dG = [0; -lambda*g];
     M00 = is + rs^2*mtot+rs^2/(rw^2)*iw;
-    M01 = rs*lambda-rs^2/(rw^2)*iw;
-    M10 = rs*lambda-rs^2/(rw^2)*iw;
+    M01 = rs*lambda+rs^2/(rw^2)*iw;
+    M10 = rs*lambda+rs^2/(rw^2)*iw;
     M11 = rtot^2*mw+rs^2/(rw^2)*iw + ib;
-    M = [M00 M01; M10 M11]
+    C=-1*(.010051-.524434);
+    M = [M00 C; C 2.43714]
     inv(M);
     A = inv(M)*-dG
      AA = [-75.5784; 34.1594];

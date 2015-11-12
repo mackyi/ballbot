@@ -1,6 +1,8 @@
 #define EI_ARDUINO_INTERRUPTED_PIN
 #include "Macros.h"
+#include <Wire.h>
 #include <EnableInterrupt.h>
+#include <FreeSixIMU.h>
 #include "Motor.h"
 
 #define M1_ENCODER_PIN  2
@@ -16,7 +18,7 @@
 #define M3_PWM_PIN      11
 #define M3_DIR_PIN      13
 
-int STD_LOOP_TIME = 9;
+int STD_LOOP_TIME = 100;
 int lastLoopTime = STD_LOOP_TIME;
 int lastLoopUsefulTime = STD_LOOP_TIME;
 unsigned long loopStartTime = 0;
@@ -24,6 +26,9 @@ unsigned long loopStartTime = 0;
 Motor m1(M1_ENCODER_PIN, M1_PWM_PIN, M1_DIR_PIN);
 Motor m2(M2_ENCODER_PIN, M2_PWM_PIN, M2_DIR_PIN);
 Motor m3(M3_ENCODER_PIN, M3_PWM_PIN, M3_DIR_PIN);
+
+FreeSixIMU sixDOF = FreeSixIMU();
+
 
 /****************************************************
  *  State variables
@@ -35,6 +40,7 @@ double ys = 0;
 double xs_dot = 0;
 double ys_dot = 0;
 
+float angles[3]; // yaw pitch roll
 // angular displacement (calculated from Kalman)
 double psi_x = 0;
 double psi_y = 0;
@@ -60,13 +66,17 @@ static double K[3][10] = {
 };
 
 void setup() {
+  Serial.begin(9600);
   setupIMU();
   setupMotors();
 
 }
 
 void setupIMU() {
-
+  Wire.begin();
+  delay(5);
+  sixDOF.init(); //begin the IMU
+  delay(5);
 }
 
 void setupMotors() {
@@ -107,7 +117,7 @@ void loop()  {
 }
 
 void sampleIMU() {
-
+  sixDOF.getYawPitchRoll(angles);
 }
 
 void sampleEncoders() {
@@ -123,5 +133,9 @@ void sendControl() {
 }
 
 void printInfo() {
-  
+  Sprint(angles[0]);
+  Sprint(" | ");  
+  Sprint(angles[1]);
+  Sprint(" | ");
+  Sprintln(angles[2]);
 }

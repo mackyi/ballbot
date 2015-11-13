@@ -20,7 +20,7 @@ void setup() {
 
 void loop() { 
   
-  sixDOF.getEuler(angles);
+  sixDOF.getYawPitchRoll(angles);
   
   Serial.print(angles[0]);
   Serial.print(" | ");  

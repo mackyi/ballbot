@@ -10,12 +10,15 @@ class Motor {
   public:
     volatile int encoder;
     int encoderPin;
+    double rpm = 0;
     
     Motor(
-      int encoderPin, int dirPin, int pwmPin
+      int encoderPin, int pwmPin, int dirPin
     ): encoderPin(encoderPin), dirPin(dirPin), pwmPin(pwmPin), encoder(0) {}
     
     void setup();
+
+    void move(double tau);
 };
 
 #endif

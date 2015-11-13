@@ -32,9 +32,10 @@ void setup() {
   digitalWrite(m1DirPin, HIGH);
   digitalWrite(m2DirPin, HIGH);
   digitalWrite(m3DirPin, HIGH);
-  analogWrite(m1PWMPin, 40);
-  analogWrite(m2PWMPin, 40);
-  analogWrite(m3PWMPin, 40);
+  double speed = 50.123123123;
+  analogWrite(m1PWMPin, speed);
+  analogWrite(m2PWMPin, speed);
+  analogWrite(m3PWMPin, speed);
 }
 
 void Increment() {

@@ -1,7 +1,7 @@
 #ifndef MACROS_H
 #define MACROS_H
 
-//#define ENABLE_PRINT
+#define ENABLE_PRINT
 
 #ifdef ENABLE_PRINT
   #define Sprintln(args...) (Serial.println(args))

@@ -9,14 +9,14 @@
 #define M2_ENCODER_PIN  3
 #define M3_ENCODER_PIN  4
 
-#define M2_PWM_PIN      9
-#define M2_DIR_PIN      8
+#define M3_PWM_PIN      9
+#define M3_DIR_PIN      8
 
 #define M1_PWM_PIN      10
 #define M1_DIR_PIN      12
 
-#define M3_PWM_PIN      11
-#define M3_DIR_PIN      13
+#define M2_PWM_PIN      11
+#define M2_DIR_PIN      13
 
 int STD_LOOP_TIME = 20;
 int lastLoopTime = STD_LOOP_TIME;
@@ -116,10 +116,12 @@ void Increment() {
 }
 
 void loop()  {
+  Sprintln("sample imu");
   sampleIMU();
   sampleEncoders();
   // TODO: calculate ball position
   calculateControl();
+  Sprintln("calculate control");
   sendControl();
   printInfo();
 // *********************** loop timing control **************************
@@ -131,6 +133,9 @@ void loop()  {
 
 void sampleIMU() {
   sixDOF.getYawPitchRoll(angles);
+  angles[0] = angles[0]*M_PI/180;
+  angles[1] = angles[1]*M_PI/180;
+  angles[2] = angles[2]*M_PI/180;
   psi_dot_z = (angles[0]-psi_z)/lastLoopTime*1000;
   psi_dot_y = (angles[1]-psi_y)/lastLoopTime*1000;
   psi_dot_x = (angles[2]-psi_x)/lastLoopTime*1000;
@@ -156,8 +161,9 @@ void sendControl() {
 }
 
 void printInfo() {
-  if(loopStartTime % 1000 < 100) {
-  Sprintln("Info:");
+  if(true) {
+  Sprint("Info: ");
+  Sprintln(loopStartTime);
   Sprint(psi_x);
   Sprint(" | ");  
   Sprint(psi_y);
@@ -173,5 +179,10 @@ void printInfo() {
   Sprint(tau_2);
   Sprint(" | ");
   Sprintln(tau_3);
+  Sprint(m1.rpm);
+  Sprint(" | ");  
+  Sprint(m2.rpm);
+  Sprint(" | ");
+  Sprintln(m3.rpm);
 }
 }

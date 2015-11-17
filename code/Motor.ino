@@ -7,12 +7,14 @@ void Motor::setup() {
 }
 
 void Motor::move(double tau) {
-	rpm = rpm*.8+tau*(.4)*.2;
-	if(rpm > 50) {
-		rpm = 50;
+	// double change = tau*.2/.694;
+	// rpm+=change;
+	rpm = 0.8*rpm + 0.2*(tau*14);
+	if(rpm > 70) {
+		rpm = 70;
 	}
-	if(rpm < -50) {
-		rpm = -50;
+	if(rpm < -70) {
+		rpm = -70;
 	}
 	double speed = rpm;
 	if(speed < 0) {

@@ -1,22 +1,35 @@
+#include <I2Cdev.h>
+#include <MPU6050_6Axis_MotionApps20.h>
 #define EI_ARDUINO_INTERRUPTED_PIN
 #include "Macros.h"
-#include <Wire.h>
 #include <EnableInterrupt.h>
-#include <FreeSixIMU.h>
 #include "Motor.h"
 
-#define M1_ENCODER_PIN  2
-#define M2_ENCODER_PIN  3
-#define M3_ENCODER_PIN  4
+#define M1_ENCODER_PIN  3
+#define M2_ENCODER_PIN  4
+#define M3_ENCODER_PIN  5
 
-#define M3_PWM_PIN      9
-#define M3_DIR_PIN      8
+#define M2_PWM_PIN      9
+#define M2_DIR_PIN      8
 
 #define M1_PWM_PIN      10
 #define M1_DIR_PIN      12
 
-#define M2_PWM_PIN      11
-#define M2_DIR_PIN      13
+#define M3_PWM_PIN      11
+#define M3_DIR_PIN      13
+
+#define X_ANGLE_OFFSET  3
+#define Y_ANGLE_OFFSET  -7
+MPU6050 imu;
+bool dmpReady;
+uint16_t imuPacketSize;
+uint8_t mpuIntStatus;
+uint8_t devStatus; 
+uint16_t fifoCount;     // count of all bytes currently in FIFO
+uint8_t fifoBuffer[64]; 
+Quaternion q;           // [w, x, y, z]         quaternion container
+VectorFloat gravity;    // [x, y, z]            gravity vector
+  
 
 int STD_LOOP_TIME = 20;
 int lastLoopTime = STD_LOOP_TIME;
@@ -27,7 +40,6 @@ Motor m1(M1_ENCODER_PIN, M1_PWM_PIN, M1_DIR_PIN);
 Motor m2(M2_ENCODER_PIN, M2_PWM_PIN, M2_DIR_PIN);
 Motor m3(M3_ENCODER_PIN, M3_PWM_PIN, M3_DIR_PIN);
 
-FreeSixIMU sixDOF = FreeSixIMU();
 
 
 /****************************************************
@@ -55,6 +67,13 @@ double psi_acc_x = 0;
 double psi_acc_y = 0;
 double psi_acc_z = 0;
 
+
+volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
+
+void dmpDataReady() {
+    mpuInterrupt = true;
+}
+
 /********************************
  * LQR Control
  * rows correspond to tau_1, tau_2, tau_3
@@ -78,18 +97,33 @@ double tau_1 = 0;
 double tau_2 = 0;
 double tau_3 = 0;
 
+long calibrationStart; 
+bool calibrating;
 void setup() {
   Serial.begin(9600);
   setupIMU();
   setupMotors();
-
+  calibrating = true;
+  calibrationStart = millis();
 }
 
 void setupIMU() {
-  Wire.begin();
-  delay(5);
-  sixDOF.init(); //begin the IMU
-  delay(5);
+  imu.initialize();
+  devStatus = imu.dmpInitialize();
+  imu.setXGyroOffset(210);
+  imu.setYGyroOffset(-50);
+  imu.setZGyroOffset(88);
+  imu.setZAccelOffset(1788);
+
+  if(devStatus == 0){
+    imu.setDMPEnabled(true);
+    enableInterrupt(2, dmpDataReady,  RISING);
+    mpuIntStatus = imu.getIntStatus();
+    dmpReady = true;
+    imuPacketSize = imu.dmpGetFIFOPacketSize();
+  }else{
+    Serial.println("DMP failed");
+  }
 }
 
 void setupMotors() {
@@ -116,12 +150,11 @@ void Increment() {
 }
 
 void loop()  {
-  Sprintln("sample imu");
   sampleIMU();
+  if(!calibrating){
   sampleEncoders();
   // TODO: calculate ball position
   calculateControl();
-  Sprintln("calculate control");
   sendControl();
   printInfo();
 // *********************** loop timing control **************************
@@ -129,19 +162,49 @@ void loop()  {
   if(lastLoopUsefulTime<STD_LOOP_TIME)         delay(STD_LOOP_TIME-lastLoopUsefulTime);
   lastLoopTime = millis() - loopStartTime;
   loopStartTime = millis();
+  }else{
+    calibrating = ((millis()-calibrationStart)<15000);
+  }
 }
 
 void sampleIMU() {
-  sixDOF.getYawPitchRoll(angles);
-  angles[0] = angles[0]*M_PI/180;
-  angles[1] = angles[1]*M_PI/180;
-  angles[2] = angles[2]*M_PI/180;
-  psi_dot_z = (angles[0]-psi_z)/lastLoopTime*1000;
-  psi_dot_y = (angles[1]-psi_y)/lastLoopTime*1000;
-  psi_dot_x = (angles[2]-psi_x)/lastLoopTime*1000;
-  psi_z = angles[0];
-  psi_y = angles[1];
-  psi_x = angles[2];
+    if(!mpuInterrupt) return;
+    mpuInterrupt = false;
+    mpuIntStatus = imu.getIntStatus();
+
+    // get current FIFO count
+    fifoCount = imu.getFIFOCount();
+
+    // check for overflow (this should never happen unless our code is too inefficient)
+    if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
+        // reset so we can continue cleanly
+        imu.resetFIFO();
+        Serial.println(F("FIFO overflow!"));
+    // otherwise, check for DMP data ready interrupt (this should happen frequently)
+    } else if (mpuIntStatus & 0x02) {
+        // wait for correct available data length, should be a VERY short wait
+        do{
+        while (fifoCount < imuPacketSize) fifoCount = imu.getFIFOCount();
+
+        // read a packet from FIFO
+       
+        imu.getFIFOBytes(fifoBuffer, imuPacketSize);
+        
+        // track FIFO count here in case there is > 1 packet available
+        // (this lets us immediately read more without waiting for an interrupt)
+        fifoCount -= imuPacketSize;
+        }while(fifoCount>= imuPacketSize);
+        
+        imu.dmpGetQuaternion(&q, fifoBuffer);
+        imu.dmpGetGravity(&gravity, &q);
+        imu.dmpGetYawPitchRoll(angles, &q, &gravity);
+        psi_dot_z = (angles[0]-psi_z)/lastLoopTime*1000;
+        psi_dot_y = (angles[1]-psi_y)/lastLoopTime*1000;
+        psi_dot_x = (angles[2]-psi_x)/lastLoopTime*1000;
+        psi_z = angles[0];
+        psi_y = angles[1];
+        psi_x = angles[2];
+    }
 }
 
 void sampleEncoders() {
@@ -161,9 +224,8 @@ void sendControl() {
 }
 
 void printInfo() {
-  if(true) {
-  Sprint("Info: ");
-  Sprintln(loopStartTime);
+  if(loopStartTime % 1000 < 100) {
+  Sprintln("Info:");
   Sprint(psi_x);
   Sprint(" | ");  
   Sprint(psi_y);
@@ -179,10 +241,5 @@ void printInfo() {
   Sprint(tau_2);
   Sprint(" | ");
   Sprintln(tau_3);
-  Sprint(m1.rpm);
-  Sprint(" | ");  
-  Sprint(m2.rpm);
-  Sprint(" | ");
-  Sprintln(m3.rpm);
 }
 }

@@ -12,14 +12,12 @@
 #define M2_PWM_PIN      9
 #define M2_DIR_PIN      8
 
-#define M1_PWM_PIN      10
-#define M1_DIR_PIN      12
+#define M3_PWM_PIN      10
+#define M3_DIR_PIN      12
 
-#define M3_PWM_PIN      11
-#define M3_DIR_PIN      13
+#define M1_PWM_PIN      11
+#define M1_DIR_PIN      13
 
-#define X_ANGLE_OFFSET  3
-#define Y_ANGLE_OFFSET  -7
 MPU6050 imu;
 bool dmpReady;
 uint16_t imuPacketSize;
@@ -29,8 +27,10 @@ uint16_t fifoCount;     // count of all bytes currently in FIFO
 uint8_t fifoBuffer[64]; 
 Quaternion q;           // [w, x, y, z]         quaternion container
 VectorFloat gravity;    // [x, y, z]            gravity vector
-  
-
+float ypr[3];  
+float yOffset = 0;
+float xOffset= 0;
+float zOffset = 0;
 int STD_LOOP_TIME = 20;
 int lastLoopTime = STD_LOOP_TIME;
 int lastLoopUsefulTime = STD_LOOP_TIME;
@@ -71,7 +71,7 @@ double psi_acc_z = 0;
 volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
 
 void dmpDataReady() {
-    mpuInterrupt = true;
+    readIMU();
 }
 
 /********************************
@@ -100,7 +100,8 @@ double tau_3 = 0;
 long calibrationStart; 
 bool calibrating;
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
+  Fastwire::setup(100,false);
   setupIMU();
   setupMotors();
   calibrating = true;
@@ -117,10 +118,11 @@ void setupIMU() {
 
   if(devStatus == 0){
     imu.setDMPEnabled(true);
-    enableInterrupt(2, dmpDataReady,  RISING);
+//    enableInterrupt(2, dmpDataReady,  RISING);
     mpuIntStatus = imu.getIntStatus();
     dmpReady = true;
     imuPacketSize = imu.dmpGetFIFOPacketSize();
+    Serial.println("DMP success");
   }else{
     Serial.println("DMP failed");
   }
@@ -150,26 +152,35 @@ void Increment() {
 }
 
 void loop()  {
-  sampleIMU();
+  readIMU();
+  sampleIMU();  
   if(!calibrating){
   sampleEncoders();
   // TODO: calculate ball position
   calculateControl();
   sendControl();
-  printInfo();
+//  printInfo();
 // *********************** loop timing control **************************
   lastLoopUsefulTime = millis()-loopStartTime;
-  if(lastLoopUsefulTime<STD_LOOP_TIME)         delay(STD_LOOP_TIME-lastLoopUsefulTime);
+  if(lastLoopUsefulTime<STD_LOOP_TIME){
+    delay(STD_LOOP_TIME-lastLoopUsefulTime);
+  }
   lastLoopTime = millis() - loopStartTime;
   loopStartTime = millis();
   }else{
-    calibrating = ((millis()-calibrationStart)<15000);
+    if(!((millis()-calibrationStart)<30000)){
+      imu.dmpGetQuaternion(&q, fifoBuffer);
+      imu.dmpGetGravity(&gravity, &q);
+      imu.dmpGetYawPitchRoll(angles, &q, &gravity);      
+      xOffset = angles[2];
+      yOffset = angles[1];
+      zOffset = angles[0];
+      calibrating = false;
+    } 
   }
 }
 
-void sampleIMU() {
-    if(!mpuInterrupt) return;
-    mpuInterrupt = false;
+void readIMU(){
     mpuIntStatus = imu.getIntStatus();
 
     // get current FIFO count
@@ -183,7 +194,6 @@ void sampleIMU() {
     // otherwise, check for DMP data ready interrupt (this should happen frequently)
     } else if (mpuIntStatus & 0x02) {
         // wait for correct available data length, should be a VERY short wait
-        do{
         while (fifoCount < imuPacketSize) fifoCount = imu.getFIFOCount();
 
         // read a packet from FIFO
@@ -193,18 +203,25 @@ void sampleIMU() {
         // track FIFO count here in case there is > 1 packet available
         // (this lets us immediately read more without waiting for an interrupt)
         fifoCount -= imuPacketSize;
-        }while(fifoCount>= imuPacketSize);
+        
+}
+}
+void sampleIMU() {
         
         imu.dmpGetQuaternion(&q, fifoBuffer);
         imu.dmpGetGravity(&gravity, &q);
         imu.dmpGetYawPitchRoll(angles, &q, &gravity);
-        psi_dot_z = (angles[0]-psi_z)/lastLoopTime*1000;
-        psi_dot_y = (angles[1]-psi_y)/lastLoopTime*1000;
-        psi_dot_x = (angles[2]-psi_x)/lastLoopTime*1000;
-        psi_z = angles[0];
-        psi_y = angles[1];
-        psi_x = angles[2];
-    }
+        
+        psi_dot_z = (angles[0]-psi_z-zOffset)/lastLoopTime*1000;
+        psi_dot_y = (angles[1]-psi_y-yOffset)/lastLoopTime*1000;
+        psi_dot_x = (angles[2]-psi_x-xOffset)/lastLoopTime*1000;
+        psi_z = angles[0]-zOffset;
+        psi_y = angles[1]-yOffset;
+        psi_x = angles[2]-xOffset;
+        if(!calibrating){
+        printAngles();
+        }
+    
 }
 
 void sampleEncoders() {
@@ -223,6 +240,14 @@ void sendControl() {
   m3.move(tau_3); 
 }
 
+void printAngles(){
+  Sprintln("angles:");
+  Sprint(psi_x);
+  Sprint(" | ");  
+  Sprint(psi_y);
+  Sprint(" | ");
+  Sprintln(psi_z);
+}
 void printInfo() {
   if(loopStartTime % 1000 < 100) {
   Sprintln("Info:");

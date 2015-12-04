@@ -31,7 +31,7 @@ float ypr[3];
 float yOffset = 0;
 float xOffset= 0;
 float zOffset = 0;
-int STD_LOOP_TIME = 20;
+int STD_LOOP_TIME = 10;
 int lastLoopTime = STD_LOOP_TIME;
 int lastLoopUsefulTime = STD_LOOP_TIME;
 unsigned long loopStartTime = 0;
@@ -86,9 +86,9 @@ void dmpDataReady() {
 // };
 
 static double K[3][10] = {
-  {0, 0, -15.7431, 0, 0, 0, 0, -2.0976*2, 0, 0},
-  {0, 0, 7.8716, 13.6339, 0, 0, 0, 2.0976, 3.6331, 0},
-  {0, 0, 7.8716, -13.6339, 0, 0, 0, 2.0976, -3.6331, 0},
+  {0, 0, -10.8617, 0, 0, 0, 0, -2.1878, 0, 0},
+  {0, 0, 5.4308, 9.4065, 0, 0, 0, 1.0939, 1.8947, 0},
+  {0, 0, 5.4308, -9.4065, 0, 0, 0, 1.0939, -1.8947, 0},
 };
 /***************************
  * output
@@ -153,7 +153,6 @@ void Increment() {
 
 void loop()  {
   readIMU();
-  sampleIMU();  
   if(!calibrating){
   sampleEncoders();
   // TODO: calculate ball position
@@ -164,7 +163,11 @@ void loop()  {
   lastLoopUsefulTime = millis()-loopStartTime;
   if(lastLoopUsefulTime<STD_LOOP_TIME){
     delay(STD_LOOP_TIME-lastLoopUsefulTime);
+  
+  }else{
+    
   }
+  
   lastLoopTime = millis() - loopStartTime;
   loopStartTime = millis();
   }else{
@@ -199,7 +202,7 @@ void readIMU(){
         // read a packet from FIFO
        
         imu.getFIFOBytes(fifoBuffer, imuPacketSize);
-        
+        sampleIMU();
         // track FIFO count here in case there is > 1 packet available
         // (this lets us immediately read more without waiting for an interrupt)
         fifoCount -= imuPacketSize;

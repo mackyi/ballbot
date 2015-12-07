@@ -9,18 +9,18 @@ void Motor::setup() {
 void Motor::move(double tau) {
 	// double change = tau*.2/.694;
 	// rpm+=change;
-	rpm = 0.8*rpm + 0.2*(tau*14);
-	if(rpm > 70) {
-		rpm = 70;
+	rpm = tau*24;
+	if(rpm > 150) {
+		rpm = 150;
 	}
-	if(rpm < -70) {
-		rpm = -70;
+	if(rpm < -150) {
+		rpm = -150;
 	}
 	double speed = rpm;
 	if(speed < 0) {
 		speed = -speed;
 	}
-	analogWrite(pwmPin, speed);
+	analogWrite(pwmPin, speed+5);
 	if(rpm < 0) {
 		digitalWrite(dirPin, HIGH);
 	} else {

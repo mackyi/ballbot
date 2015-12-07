@@ -3,7 +3,7 @@
 
 
 
-int m1PWMPin = 9;
+int m1PWMPin = 3;
 int m1DirPin = 8;
 int m1EncoderPin = 2;
 volatile int m1Encoder = 0;
@@ -20,6 +20,7 @@ volatile int m3Encoder = 0;
 
 
 void setup() {
+  Serial.begin(115200);
   pinMode(m1Encoder, INPUT_PULLUP);
   pinMode(m2Encoder, INPUT_PULLUP);
   pinMode(m3Encoder, INPUT_PULLUP);
@@ -32,7 +33,7 @@ void setup() {
   digitalWrite(m1DirPin, HIGH);
   digitalWrite(m2DirPin, HIGH);
   digitalWrite(m3DirPin, HIGH);
-  double speed = 50.123123123;
+  double speed = 0;
   analogWrite(m1PWMPin, speed);
   analogWrite(m2PWMPin, speed);
   analogWrite(m3PWMPin, speed);
@@ -64,6 +65,16 @@ void loop() {
   if (m3Encoder >= 200) {
   //  changeDirection(m3PWMPin, m3DirPin);
     m3Encoder = 0;
+  }
+
+  for(int i=0;i<=150;i+=1){
+  double speed = i;
+  analogWrite(m1PWMPin, speed);
+  analogWrite(m2PWMPin, speed);
+  analogWrite(m3PWMPin, speed); 
+  Serial.println(i);
+  delay(1000);
+  
   }
 }
 

@@ -27,3 +27,11 @@ void Motor::move(double tau) {
 		digitalWrite(dirPin, LOW);
 	}
 }	
+
+void Motor::increment() {
+	if(rpm >= 0) {
+		encoder++;
+	} else {
+		encoder--;
+	}
+}

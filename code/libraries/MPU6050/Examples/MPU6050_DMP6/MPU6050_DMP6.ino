@@ -118,7 +118,7 @@ MPU6050 mpu;
 
 
 
-#define LED_PIN 13 // (Arduino is 13, Teensy is 11, Teensy++ is 6)
+#define LED_PIN 7 // (Arduino is 13, Teensy is 11, Teensy++ is 6)
 bool blinkState = false;
 
 // MPU control/status vars
@@ -129,6 +129,8 @@ uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
 uint16_t fifoCount;     // count of all bytes currently in FIFO
 uint8_t fifoBuffer[64]; // FIFO storage buffer
 
+int16_t ax, ay, az;
+int16_t gx, gy, gz;
 // orientation/motion vars
 Quaternion q;           // [w, x, y, z]         quaternion container
 VectorInt16 aa;         // [x, y, z]            accel sensor measurements
@@ -232,6 +234,7 @@ void setup() {
 
     // configure LED for output
     pinMode(LED_PIN, OUTPUT);
+    pinMode(13, OUTPUT);
 }
 
 
@@ -245,7 +248,10 @@ void loop() {
     if (!dmpReady) return;
 
     // wait for MPU interrupt or extra packet(s) available
+
     while (!mpuInterrupt && fifoCount < packetSize) {
+        mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);   
+
         // other program behavior stuff here
         // .
         // .
@@ -257,7 +263,6 @@ void loop() {
         // .
         // .
     }
-
     // reset interrupt flag and get INT_STATUS byte
     mpuInterrupt = false;
     mpuIntStatus = mpu.getIntStatus();
@@ -274,11 +279,11 @@ void loop() {
     // otherwise, check for DMP data ready interrupt (this should happen frequently)
     } else if (mpuIntStatus & 0x02) {
         // wait for correct available data length, should be a VERY short wait
-        while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();
-
+        while (fifoCount < packetSize) {
+            fifoCount = mpu.getFIFOCount();
+        }
         // read a packet from FIFO
         mpu.getFIFOBytes(fifoBuffer, packetSize);
-        
         // track FIFO count here in case there is > 1 packet available
         // (this lets us immediately read more without waiting for an interrupt)
         fifoCount -= packetSize;
@@ -312,13 +317,20 @@ void loop() {
             // display Euler angles in degrees
             mpu.dmpGetQuaternion(&q, fifoBuffer);
             mpu.dmpGetGravity(&gravity, &q);
-            mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-            Serial.print("ypr\t");
+            mpu.dmpGetYawPitchRoll(ypr, &q, &gravity); 
+            Serial.print("ypr + raw\t");
             Serial.print(ypr[0] * 180/M_PI);
             Serial.print("\t");
             Serial.print(ypr[1] * 180/M_PI);
             Serial.print("\t");
-            Serial.println(ypr[2] * 180/M_PI);
+            Serial.print(ypr[2] * 180/M_PI);
+            Serial.print("\t");
+            Serial.print(az); Serial.print("\t");
+            Serial.print(ay); Serial.print("\t");
+            Serial.print(ax); Serial.print("\t");
+            Serial.print(gz); Serial.print("\t");
+            Serial.print(gy); Serial.print("\t");
+            Serial.println(gx);
         #endif
 
         #ifdef OUTPUT_READABLE_REALACCEL

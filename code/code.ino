@@ -111,6 +111,7 @@ void setup() {
 }
 
 void setupIMU() {
+  long start = micros();
   digitalWrite(READY_PIN, HIGH);
   imu.initialize();
   devStatus = imu.dmpInitialize();
@@ -125,10 +126,12 @@ void setupIMU() {
     mpuIntStatus = imu.getIntStatus();
     dmpReady = true;
     imuPacketSize = imu.dmpGetFIFOPacketSize();
+    Serial.println(micros()-start);
     Serial.println("DMP success");
   } else {
     Serial.println("DMP failed");
   }
+
 }
 
 void setupMotors() {
@@ -211,14 +214,33 @@ void readIMU() {
 
   }
 }
-void sampleIMU() {
 
+static double IMU_DIFF_THRESHOLD = 0.3;
+int consecutive_filtered = 0;
+
+void sampleIMU() {
+  // Serial.println("sampleimu");
   imu.dmpGetQuaternion(&q, fifoBuffer);
   imu.dmpGetGravity(&gravity, &q);
   imu.dmpGetYawPitchRoll(angles, &q, &gravity);
-  if (angles[1] - yOffset > 1.57 || angles[2] - xOffset > 1.57) {
+  double diff_y = angles[1] - psi_y - yOffset;
+  double diff_x = angles[2] - psi_x - xOffset;
+  if(abs(diff_y) > IMU_DIFF_THRESHOLD || abs(diff_x) > IMU_DIFF_THRESHOLD) {
+    Sprint("filtered: ");
+    Sprint(angles[2] - xOffset);
+    Sprint(" | ");
+    Sprint(angles[1] - yOffset);
+    Sprint(" | ");
+    Sprintln(angles[0] - zOffset);
+    consecutive_filtered++;
+    if(consecutive_filtered > 2) {
+      consecutive_filtered = 0;
+      // imu.resetDMP();
+      // reset somehow
+    }
     return;
   }
+  consecutive_filtered = 0;
   psi_dot_z = (angles[0] - psi_z - zOffset) / lastLoopTime * 1000;
   psi_dot_y = (angles[1] - psi_y - yOffset) / lastLoopTime * 1000;
   psi_dot_x = (angles[2] - psi_x - xOffset) / lastLoopTime * 1000;
@@ -266,7 +288,7 @@ void sendControl() {
 }
 
 void printAngles() {
-  Sprintln("angles:");
+  // Sprintln("angles:");
   Sprint(psi_x);
   Sprint(" | ");
   Sprint(psi_y);

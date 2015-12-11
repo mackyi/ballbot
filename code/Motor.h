@@ -18,7 +18,7 @@ class Motor {
     
     void setup();
 
-    void move(double tau);
+    void move(double tau, double vtau);
 
     void increment();
 };

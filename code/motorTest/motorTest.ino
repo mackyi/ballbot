@@ -3,19 +3,19 @@
 
 
 
-int m1PWMPin = 3;
-int m1DirPin = 8;
-int m1EncoderPin = 2;
+int m1PWMPin = 11;
+int m1DirPin = 13;
+int m1EncoderPin = 6;
 volatile int m1Encoder = 0;
 
-int m2PWMPin = 10;
-int m2DirPin = 12;
-int m2EncoderPin = 3;
+int m2PWMPin = 3;
+int m2DirPin = 8;
+int m2EncoderPin = 4;
 volatile int m2Encoder = 0;
 
-int m3PWMPin = 11;
-int m3DirPin = 13;
-int m3EncoderPin = 4;
+int m3PWMPin = 10;
+int m3DirPin = 12;
+int m3EncoderPin = 5;
 volatile int m3Encoder = 0;
 
 
@@ -33,10 +33,10 @@ void setup() {
   digitalWrite(m1DirPin, HIGH);
   digitalWrite(m2DirPin, HIGH);
   digitalWrite(m3DirPin, HIGH);
-  double speed = 0;
+  double speed = 30;
   analogWrite(m1PWMPin, speed);
-  analogWrite(m2PWMPin, speed);
-  analogWrite(m3PWMPin, speed);
+  analogWrite(m2PWMPin, 0);
+  analogWrite(m3PWMPin, 0);
 }
 
 void Increment() {
@@ -54,28 +54,30 @@ void Increment() {
 }
 
 void loop() {
-  if (m1Encoder >= 200) {
+  if (m1Encoder >= 240) {
    // changeDirection(m1PWMPin, m1DirPin);
-    m1Encoder = 0;
+    //m1Encoder = 0;
+    analogWrite(m1PWMPin, 0);
   }
-  if (m2Encoder >= 200) {
+  if (m2Encoder >= 240) {
    // changeDirection(m2PWMPin, m2DirPin);
-    m2Encoder = 0;
+    //m2Encoder = 0;
+    analogWrite(m2PWMPin, 0);
   }
-  if (m3Encoder >= 200) {
+  if (m3Encoder >= 240) {
   //  changeDirection(m3PWMPin, m3DirPin);
-    m3Encoder = 0;
+    // m3Encoder = 0;
+    analogWrite(m3PWMPin, 0);
   }
-
-  for(int i=0;i<=150;i+=1){
-  double speed = i;
-  analogWrite(m1PWMPin, speed);
-  analogWrite(m2PWMPin, speed);
-  analogWrite(m3PWMPin, speed); 
-  Serial.println(i);
-  delay(1000);
+  // for(int i=0;i<=150;i+=1){
+  // double speed = i;
+  // analogWrite(m1PWMPin, speed);
+  // analogWrite(m2PWMPin, speed);
+  // analogWrite(m3PWMPin, speed); 
+  // Serial.println(i);
+  // delay(1000);
   
-  }
+  // }
 }
 
 void changeDirection(int pwmPin, int dirPin){

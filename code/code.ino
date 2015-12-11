@@ -5,7 +5,7 @@
 #include <EnableInterrupt.h>
 #include "Motor.h"
 
-#define M1_ENCODER_PIN  2
+#define M1_ENCODER_PIN  6
 #define M2_ENCODER_PIN  4
 #define M3_ENCODER_PIN  5
 
@@ -19,6 +19,9 @@
 #define M1_DIR_PIN      13
 
 #define READY_PIN       7
+
+// Find velocity by taking the change over the last LM_SIZE readings
+#define LM_SIZE 10
 
 MPU6050 imu;
 bool dmpReady;
@@ -69,7 +72,6 @@ double psi_acc_x = 0;
 double psi_acc_y = 0;
 double psi_acc_z = 0;
 
-
 volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
 
 void dmpDataReady() {
@@ -88,16 +90,30 @@ void dmpDataReady() {
 // };
 
 static double K[3][10] = {
-  {0, 0, -10.8617, 0, 0, 0, 0, -2.1878, 0, 0},
-  {0, 0, 5.4308, 9.4065, 0, 0, 0, 1.0939, 1.8947, 0},
-  {0, 0, 5.4308, -9.4065, 0, 0, 0, 1.0939, -1.8947, 0},
+  {0      , -1.4697 , -10.8617, 0       , -0.1654, 0, 0, -2.1878, 0, 0},
+  {1.2728 , 0.7348  , 5.4308  , 9.4065  , -0.1654, 0, 0, 1.0939, 1.8947, 0},
+  {-1.2728, 0.7348  , 5.4308  , -9.4065 , -0.1654, 0, 0, 1.0939, -1.8947, 0},
 };
+
+static double M[3][3] = {
+  {2*sqrt(2)/3, -sqrt(2)/3, -sqrt(2)/3},
+  {0, sqrt(6)/3, -sqrt(6)/3},
+  {-sqrt(2)/3, -sqrt(2)/3, -sqrt(2)/3},
+};
+
+static double RW = .0508;
+static double RS = .1397;
+
+
 /***************************
  * output
  */
 double tau_1 = 0;
 double tau_2 = 0;
 double tau_3 = 0;
+double vtau_1 = 0;
+double vtau_2 = 0;
+double vtau_3 = 0;
 
 long calibrationStart;
 bool calibrating;
@@ -112,6 +128,7 @@ void setup() {
 
 void setupIMU() {
   long start = micros();
+  pinMode(READY_PIN, OUTPUT);
   digitalWrite(READY_PIN, HIGH);
   imu.initialize();
   devStatus = imu.dmpInitialize();
@@ -147,11 +164,11 @@ void Increment() {
   //  analogWrite(5, m1Encoder);
   int pin = arduinoInterruptedPin;
   if (pin == m1.encoderPin) {
-    m1.encoder++;
+    m1.increment();
   } else if (pin == m2.encoderPin) {
-    m2.encoder++;
+    m2.increment();
   } else if (pin == m3.encoderPin) {
-    m3.encoder++;
+    m3.increment();
   } else {
     Sprintln("Increment on unexpected pin");
   }
@@ -160,6 +177,7 @@ void Increment() {
 void loop()  {
   readIMU();
   if (!calibrating) {
+    calculateVelocities();
     sampleEncoders();
     // TODO: calculate ball position
     calculateControl();
@@ -241,9 +259,9 @@ void sampleIMU() {
     return;
   }
   consecutive_filtered = 0;
-  psi_dot_z = (angles[0] - psi_z - zOffset) / lastLoopTime * 1000;
-  psi_dot_y = (angles[1] - psi_y - yOffset) / lastLoopTime * 1000;
-  psi_dot_x = (angles[2] - psi_x - xOffset) / lastLoopTime * 1000;
+  // psi_dot_z = (angles[0] - psi_z - zOffset) / lastLoopTime * 1000;
+  // psi_dot_y = (angles[1] - psi_y - yOffset) / lastLoopTime * 1000;
+  // psi_dot_x = (angles[2] - psi_x - xOffset) / lastLoopTime * 1000;
   psi_z = angles[0] - zOffset;
   psi_y = angles[1] - yOffset;
   psi_x = angles[2] - xOffset;
@@ -253,17 +271,89 @@ void sampleIMU() {
 
 }
 
+void calculateVelocities() {
+  psi_dot_x = calcPsiDotX(psi_x);
+  psi_dot_y = calcPsiDotY(psi_y);
+  psi_dot_z = calcPsiDotZ(psi_z);
+  printVelocities();
+}
+
+float calcPsiDotZ(float M) {
+  static float LM[LM_SIZE];      // LastMeasurements
+  static byte index = 0;
+
+  // keep sum updated to improve speed.
+  float diff = M - LM[index];
+  LM[index] = M;
+  index = (index + 1) % LM_SIZE;
+
+  return diff/(STD_LOOP_TIME*LM_SIZE)*1000;
+}
+
+float calcPsiDotX(float M) {
+  static float LM[LM_SIZE];      // LastMeasurements
+  static byte index = 0;
+
+  // keep sum updated to improve speed.
+  float diff = M - LM[index];
+  LM[index] = M;
+  index = (index + 1) % LM_SIZE;
+
+  return diff/(STD_LOOP_TIME*LM_SIZE)*1000;
+}
+
+float calcPsiDotY(float M) {
+  static float LM[LM_SIZE];      // LastMeasurements
+  static byte index = 0;
+
+  // keep sum updated to improve speed.
+  float diff = M - LM[index];
+  LM[index] = M;
+  index = (index + 1) % LM_SIZE;
+
+  return diff/(STD_LOOP_TIME*LM_SIZE)*1000;
+}
+
 void sampleEncoders() {
+  // get the encoder data
+  double phi_1 = m1.encoder*3/180*M_PI;
+  double phi_2 = m2.encoder*3/180*M_PI;
+  double phi_3 = m3.encoder*3/180*M_PI;
+  xs = (0.0239473*phi_1 - 0.041478*phi_2 + 
+     0.0239473*phi_3)*cos(psi_z) + (0.0478947*phi_1 - 
+     0.0239473*phi_3)*sin(psi_z);
+  ys = (0.0478947*phi_1 - 
+     0.0239473*phi_3)*cos(psi_z) + (-0.0239473*phi_1 + 
+     0.041478*phi_2 - 0.0239473*phi_3)*sin(psi_z);
+  Sprint(m1.encoder);
+  Sprint("|");
+  Sprint(m2.encoder);
+  Sprint("|");
+  Sprint(m3.encoder);
+  Sprint("|");
+  Sprint(xs);
+  Sprint("|");
+  Sprintln(ys);
+  // double[][] RMat = {
+  //   {cos(psi_z), sin(psi_z)},
+  //   {-sin(psi_z), cos(psi_z)},
+  // };
 
 }
 
 void calculateControl() {
-  tau_1 = K[0][2] * psi_x + K[0][3] * psi_y;
-  //  float psi_t1=K[0][7]*psi_dot_x+K[0][8]*psi_dot_y;
-  tau_2 = K[1][2] * psi_x + K[1][3] * psi_y;
-  //  float psi_t2=K[1][7]*psi_dot_x+K[1][8]*psi_dot_y;
-  tau_3 = K[2][2] * psi_x + K[2][3] * psi_y;
-  //  float psi_t3=K[2][7]*psi_dot_x+K[2][8]*psi_dot_y;
+  tau_1 = K[0][2] * psi_x + K[0][3] * psi_y 
+    + K[0][0]*xs + K[0][1]*ys
+    + K[0][4]*psi_z;
+  vtau_1=K[0][7]*psi_dot_x+K[0][8]*psi_dot_y;
+  tau_2 = K[1][2] * psi_x + K[1][3] * psi_y 
+    + K[1][0]*xs + K[1][1]*ys
+    + K[1][4]*psi_z;
+  vtau_2=K[1][7]*psi_dot_x+K[1][8]*psi_dot_y;
+  tau_3 = K[2][2] * psi_x + K[2][3] * psi_y + 
+    K[2][0]* xs + K[2][1]*ys
+    + K[2][4]*psi_z;;
+  vtau_3=K[2][7]*psi_dot_x+K[2][8]*psi_dot_y;
 
   //  Serial.print("Tau 1:");
   //  Serial.print(tau_1);
@@ -282,19 +372,27 @@ void calculateControl() {
 }
 
 void sendControl() {
-  m1.move(tau_1);
-  m2.move(tau_2);
-  m3.move(tau_3);
+  m1.move(tau_1, vtau_1);
+  m2.move(tau_2, vtau_2);
+  m3.move(tau_3, vtau_3);
+}
+
+void printVelocities() {
+  // Sprint(psi_dot_x);
+  // Sprint(" | ");
+  // Sprintln(psi_dot_y);
+  // Sprint(" | ");
+  // Sprintln(psi_dot_z);  
 }
 
 void printAngles() {
   // Sprintln("angles:");
-  Sprint(psi_x);
-  Sprint(" | ");
-  Sprint(psi_y);
-  Sprint(" | ");
-  Sprintln(psi_z);
-  //  Sprint(" | ");
+  // Sprint(psi_x);
+  // Sprint(" | ");
+  // Sprint(psi_y);
+  // Sprint(" | ");
+  // Sprintln(psi_z);
+  // //  Sprint(" | ");
   //  Sprint(psi_dot_x);
   //  Sprint(" | ");
   //  Sprint(psi_dot_y);

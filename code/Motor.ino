@@ -6,10 +6,10 @@ void Motor::setup() {
   pinMode(pwmPin, OUTPUT);
 }
 
-void Motor::move(double tau) {
+void Motor::move(double tau, double vtau) {
 	// double change = tau*.2/.694;
 	// rpm+=change;
-	rpm = tau*24;
+	rpm = (tau)*35;
 	if(rpm > 150) {
 		rpm = 150;
 	}
@@ -20,7 +20,7 @@ void Motor::move(double tau) {
 	if(speed < 0) {
 		speed = -speed;
 	}
-	analogWrite(pwmPin, speed+5);
+	analogWrite(pwmPin, speed);
 	if(rpm < 0) {
 		digitalWrite(dirPin, HIGH);
 	} else {
